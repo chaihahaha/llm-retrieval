@@ -80,8 +80,6 @@ def main():
             if text:  # 只保留非空文本
                 documents.append(text)
                 file_names.append(filepath.name)
-    print('####################docs')
-    print(documents)
 
     if not documents:
         print("❌ 未找到任何有效的文档（支持：PDF、HTML、TXT、DOCX）")
@@ -94,8 +92,8 @@ def main():
     payload = {
         "model": "M",
         "query": query,
-        "texts": False,
-        "return_text": False,  # 不返回原文，只返回排序
+        "texts": True,
+        "return_text": True,
         "top_n": len(documents),  # 可设为较小值，如10
         "documents": documents
     }
@@ -137,7 +135,7 @@ def main():
                 filename = f"[未知文档_{doc_index}]"
 
             print(f"{idx:2d}. {filename} (score: {score})")
-            #print(f"文件内容:{documents[doc_index]}")
+            print(f"    文件内容:{documents[doc_index]}")
 
         # 可选：输出完整结果（用于调试）
         print(f"\n🔍 完整响应:")
