@@ -2,4 +2,3 @@ PyPDF2
 beautifulsoup4
 python-docx
 requests
-json

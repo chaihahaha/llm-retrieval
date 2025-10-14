@@ -6,7 +6,7 @@ from pathlib import Path
 import argparse
 
 # 文档文本提取函数
-def extract_text_from_file(filepath):
+def extract_text_from_file(filepath, supported_exts):
     """根据文件扩展名，调用对应库提取文本"""
     filepath = Path(filepath)
     ext = filepath.suffix.lower()
@@ -32,14 +32,14 @@ def extract_text_from_file(filepath):
                 chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
                 text = "\n".join(chunk for chunk in chunks if chunk)
                 return text
-        elif ext == ".txt":
-            with open(filepath, "r", encoding="utf-8") as f:
-                return f.read().strip()
         elif ext in [".doc", ".docx"]:
             from docx import Document
             doc = Document(filepath)
             text = "\n".join([para.text for para in doc.paragraphs])
             return text.strip()
+        elif ext in supported_exts:
+            with open(filepath, "r", encoding="utf-8") as f:
+                return f.read().strip()
         else:
             print(f"⚠️ 未知文件类型: {filepath.name}，跳过")
             return ""
@@ -51,20 +51,27 @@ def main():
     parser = argparse.ArgumentParser(description="Rerank documents using local API")
     parser.add_argument("--docs_dir", required=True, help="目录路径，包含PDF、HTML、TXT、DOCX等文档")
     parser.add_argument("--query_file", required=True, help="包含查询语句的文本文件（一行一个或整个内容作为单条查询）")
+    parser.add_argument("--add_ext", default=".py.cpp.c.rs", required=False, help="额外的文本格式文件后缀")
+    parser.add_argument("--topn", type=int, default=15, required=False, help="最佳匹配结果显示数量")
 
     args = parser.parse_args()
 
-    # 1. 读取查询语句
-    with open(args.query_file, "r", encoding="utf-8") as f:
-        query = f.read().strip()
+    # 1. 添加额外的文本文件后缀
+    supported_exts = {".pdf", ".html", ".htm", ".txt", ".docx", ".doc"}
+    for ext in args.add_ext.split("."):
+        if ext:
+            supported_exts.add(f".{ext}")
+
+
+    # 2. 读取查询语句
+    query = extract_text_from_file(args.query_file, supported_exts)
     if not query:
         print("❌ 查询文件为空")
         sys.exit(1)
     else:
         print(f"用户查询: {query}")
 
-    # 2. 遍历 docs_dir 下的所有支持文档
-    supported_exts = {".pdf", ".html", ".htm", ".txt", ".docx", ".doc"}
+    # 3. 遍历 docs_dir 下的所有支持文档
     docs_dir = Path(args.docs_dir)
     
     if not docs_dir.exists() or not docs_dir.is_dir():
@@ -74,12 +81,13 @@ def main():
     documents = []
     file_names = []
 
-    for filepath in docs_dir.glob("**/*.[txt,doc,docx,pdf,html,htm]"):
-        if filepath.is_file() and filepath.suffix.lower() in supported_exts:
-            text = extract_text_from_file(filepath)
-            if text:  # 只保留非空文本
-                documents.append(text)
-                file_names.append(filepath.name)
+    for ext in supported_exts:
+        for filepath in docs_dir.rglob(f"*{ext}"):
+            if filepath.is_file() and filepath.suffix.lower() in supported_exts:
+                text = extract_text_from_file(filepath, supported_exts)
+                if text:  # 只保留非空文本
+                    documents.append(text)
+                    file_names.append(filepath.name)
 
     if not documents:
         print("❌ 未找到任何有效的文档（支持：PDF、HTML、TXT、DOCX）")
@@ -87,14 +95,14 @@ def main():
 
     print(f"✅ 成功加载 {len(documents)} 个文档")
 
-    # 3. 构造请求
+    # 4. 构造请求
     URL = "http://127.0.0.1:5678"
     payload = {
         "model": "M",
         "query": query,
         "texts": True,
         "return_text": True,
-        "top_n": len(documents),  # 可设为较小值，如10
+        "top_n": args.topn,
         "documents": documents
     }
 
@@ -119,13 +127,13 @@ def main():
             results = response_json["results"]
         
         # 5. 按 relevance_score 排序（API返回的已经是排序好的，但保险起见）
-        #results.sort(key=lambda x: x.get("relevance_score", 0), reverse=True)
+        results.sort(key=lambda x: x.get("relevance_score", 0), reverse=True)
         
         # 打印结果
         print(f"\n🏆 Reranked Results (Top {len(results)}):")
         print("-" * 80)
         
-        for idx, result in enumerate(results[:15], start=1):  # 只显示前15个
+        for idx, result in enumerate(results[:args.topn], start=1):  # 只显示前15个
             doc_index = result.get("index", -1)
             score = result.get("relevance_score", 0.0)
 
