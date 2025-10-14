@@ -20,7 +20,7 @@ def extract_text_from_file(filepath):
                 for page in reader.pages:
                     text += page.extract_text() + "\n"
                 return text.strip()
-        elif ext == ".html" or ext == ".htm":
+        elif ext in [".html", ".htm"]:
             from bs4 import BeautifulSoup
             with open(filepath, "r", encoding="utf-8") as f:
                 soup = BeautifulSoup(f.read(), "lxml")
@@ -35,7 +35,7 @@ def extract_text_from_file(filepath):
         elif ext == ".txt":
             with open(filepath, "r", encoding="utf-8") as f:
                 return f.read().strip()
-        elif ext == ".docx":
+        elif ext in [".doc", ".docx"]:
             from docx import Document
             doc = Document(filepath)
             text = "\n".join([para.text for para in doc.paragraphs])
@@ -64,7 +64,7 @@ def main():
         print(f"用户查询: {query}")
 
     # 2. 遍历 docs_dir 下的所有支持文档
-    supported_exts = {".pdf", ".html", ".htm", ".txt", ".docx"}
+    supported_exts = {".pdf", ".html", ".htm", ".txt", ".docx", ".doc"}
     docs_dir = Path(args.docs_dir)
     
     if not docs_dir.exists() or not docs_dir.is_dir():
@@ -74,7 +74,7 @@ def main():
     documents = []
     file_names = []
 
-    for filepath in docs_dir.glob("**/*.[txt,doc,docx,pdf,html]"):
+    for filepath in docs_dir.glob("**/*.[txt,doc,docx,pdf,html,htm]"):
         if filepath.is_file() and filepath.suffix.lower() in supported_exts:
             text = extract_text_from_file(filepath)
             if text:  # 只保留非空文本
