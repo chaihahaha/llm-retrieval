@@ -50,9 +50,12 @@ def extract_text_from_file(filepath, supported_exts):
 def main():
     parser = argparse.ArgumentParser(description="Rerank documents using local API")
     parser.add_argument("--docs_dir", required=True, help="目录路径，包含PDF、HTML、TXT、DOCX等文档")
-    parser.add_argument("--query_file", required=True, help="包含查询语句的文本文件（一行一个或整个内容作为单条查询）")
+    query_group = parser.add_mutually_exclusive_group(required=True)
+    query_group.add_argument("--query_file", type=str, help="包含查询语句的文本文件（一行一个或整个内容作为单条查询）")
+    query_group.add_argument("--query", type=str, help="包含查询语句的文本文件（一行一个或整个内容作为单条查询）")
     parser.add_argument("--add_ext", default=".py.cpp.c.rs", required=False, help="额外的文本格式文件后缀")
-    parser.add_argument("--topn", type=int, default=15, required=False, help="最佳匹配结果显示数量")
+    parser.add_argument("--top_n", type=int, default=15, required=False, help="最佳匹配结果显示数量")
+    parser.add_argument("--chunk_lines", type=int, default=2, required=False, help="搜索最小单元为多少行")
 
     args = parser.parse_args()
 
@@ -64,7 +67,13 @@ def main():
 
 
     # 2. 读取查询语句
-    query = extract_text_from_file(args.query_file, supported_exts)
+    if args.query:
+        query = args.query
+    elif args.query_file:
+        query = extract_text_from_file(args.query_file, supported_exts)
+    else:
+        query = ""
+
     if not query:
         print("❌ 查询文件为空")
         sys.exit(1)
@@ -95,6 +104,15 @@ def main():
 
     print(f"✅ 成功加载 {len(documents)} 个文档")
 
+    # 4. 将文档拆成块
+    documents_chunks = []
+    documents_chunks_filename = []
+    for doc_index,doc in enumerate(documents):
+        new_chunks = doc.split('\n')
+        new_chunks = ["\n".join(new_chunks[i:i+args.chunk_lines]) for i in range(len(new_chunks)//args.chunk_lines)]
+        documents_chunks += new_chunks
+        documents_chunks_filename += [file_names[doc_index]] * len(new_chunks)
+
     # 4. 构造请求
     URL = "http://127.0.0.1:5678"
     payload = {
@@ -102,8 +120,8 @@ def main():
         "query": query,
         "texts": True,
         "return_text": True,
-        "top_n": args.topn,
-        "documents": documents
+        "top_n": args.top_n,
+        "documents": documents_chunks
     }
 
     # 4. 发送请求
@@ -133,17 +151,17 @@ def main():
         print(f"\n🏆 Reranked Results (Top {len(results)}):")
         print("-" * 80)
         
-        for idx, result in enumerate(results[:args.topn], start=1):  # 只显示前15个
-            doc_index = result.get("index", -1)
-            score = result.get("relevance_score", 0.0)
+        for idx, result in enumerate(results[:args.top_n], start=1):  # 只显示前15个
+            chunk_index = result.get("index", -1)
+            score = result.get("score", 0.0)
 
-            if doc_index < len(file_names):
-                filename = file_names[doc_index]
+            if chunk_index < len(documents_chunks_filename):
+                filename = documents_chunks_filename[chunk_index]
             else:
-                filename = f"[未知文档_{doc_index}]"
+                filename = f"[未知文档_{chunk_index}]"
 
             print(f"{idx:2d}. {filename} (score: {score})")
-            print(f"    文件内容:{documents[doc_index]}")
+            print(f"    文件内容:{documents_chunks[chunk_index]}")
 
         # 可选：输出完整结果（用于调试）
         print(f"\n🔍 完整响应:")
