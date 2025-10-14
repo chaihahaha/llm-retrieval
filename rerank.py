@@ -74,7 +74,7 @@ def main():
     documents = []
     file_names = []
 
-    for filepath in docs_dir.iterdir():
+    for filepath in docs_dir.glob("**/*.[txt,doc,docx,pdf,html]"):
         if filepath.is_file() and filepath.suffix.lower() in supported_exts:
             text = extract_text_from_file(filepath)
             if text:  # 只保留非空文本
