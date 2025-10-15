@@ -124,7 +124,7 @@ def main():
         "documents": documents_chunks
     }
 
-    # 4. 发送请求
+    # 5. 发送请求
     try:
         response = requests.post(
             f"{URL}/v1/rerank",
@@ -144,8 +144,8 @@ def main():
         else:
             results = response_json["results"]
         
-        # 5. 按 relevance_score 排序（API返回的已经是排序好的，但保险起见）
-        results.sort(key=lambda x: x.get("relevance_score", 0), reverse=True)
+        # 6. 按 score 排序（API返回的已经是排序好的，但保险起见）
+        results.sort(key=lambda x: x.get("score", 0), reverse=True)
         
         # 打印结果
         print(f"\n🏆 Reranked Results (Top {len(results)}):")
