@@ -2,3 +2,4 @@ PyPDF2
 beautifulsoup4
 python-docx
 requests
+langchain-text-splitters

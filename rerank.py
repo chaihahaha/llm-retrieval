@@ -4,9 +4,10 @@ import json
 import requests
 from pathlib import Path
 import argparse
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 # 文档文本提取函数
-def extract_text_from_file(filepath, supported_exts):
+def extract_text_from_file(filepath, supported_exts, keep_chunks=False):
     """根据文件扩展名，调用对应库提取文本"""
     filepath = Path(filepath)
     ext = filepath.suffix.lower()
@@ -16,10 +17,13 @@ def extract_text_from_file(filepath, supported_exts):
             import PyPDF2
             with open(filepath, "rb") as f:
                 reader = PyPDF2.PdfReader(f)
-                text = ""
+                chunks = []
                 for page in reader.pages:
-                    text += page.extract_text() + "\n"
-                return text.strip()
+                    chunks.append(page.extract_text().strip())
+                if keep_chunks:
+                    return chunks
+                else:
+                    return "\n".join(chunks)
         elif ext in [".html", ".htm"]:
             from bs4 import BeautifulSoup
             with open(filepath, "r", encoding="utf-8") as f:
@@ -30,22 +34,47 @@ def extract_text_from_file(filepath, supported_exts):
                 text = soup.get_text(separator="\n")
                 lines = (line.strip() for line in text.splitlines())
                 chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
-                text = "\n".join(chunk for chunk in chunks if chunk)
-                return text
+                if keep_chunks:
+                    return list(chunks)
+                else:
+                    text = "\n".join(chunk for chunk in chunks if chunk)
+                    return text
         elif ext in [".doc", ".docx"]:
             from docx import Document
             doc = Document(filepath)
-            text = "\n".join([para.text for para in doc.paragraphs])
-            return text.strip()
+            chunks = [para.text for para in doc.paragraphs]
+            if keep_chunks:
+                return list(chunks)
+            else:
+                text = "\n".join(chunks)
+                return text.strip()
         elif ext in supported_exts:
             with open(filepath, "r", encoding="utf-8") as f:
-                return f.read().strip()
+                text = f.read().strip()
+                if keep_chunks:
+                    return [text]
+                else:
+                    return text
         else:
             print(f"⚠️ 未知文件类型: {filepath.name}，跳过")
-            return ""
+            if keep_chunks:
+                return []
+            else:
+                return ""
     except Exception as e:
         print(f"❌ 读取 {filepath} 失败: {e}")
-        return ""
+        if keep_chunks:
+            return []
+        else:
+            return ""
+
+def subdivide_chunks(chunks, text_splitter):
+    documents_chunks = []
+    documents_chunks_filename = []
+    for doc_index,doc in enumerate(chunks):
+        new_chunks = text_splitter.split_text(doc)
+        documents_chunks += new_chunks
+    return documents_chunks
 
 def main():
     parser = argparse.ArgumentParser(description="Rerank documents using local API")
@@ -88,15 +117,25 @@ def main():
         sys.exit(1)
 
     documents = []
-    file_names = []
+    documents_chunks = []
+    chunk2filename_idx = []
+    documents_paths = []
+    fn_idx = 0
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=0)
 
     for ext in supported_exts:
         for filepath in docs_dir.rglob(f"*{ext}"):
             if filepath.is_file() and filepath.suffix.lower() in supported_exts:
-                text = extract_text_from_file(filepath, supported_exts)
-                if text:  # 只保留非空文本
-                    documents.append(text)
-                    file_names.append(filepath.name)
+                documents_paths.append(filepath.name)
+
+                new_chunks = extract_text_from_file(filepath, supported_exts, keep_chunks=True)
+                if new_chunks:
+                    documents.append("\n".join(new_chunks))
+                    new_chunks = subdivide_chunks(new_chunks, text_splitter)
+                    documents_chunks += new_chunks
+                    chunk2filename_idx += [fn_idx] * len(new_chunks)
+
+                fn_idx += 1
 
     if not documents:
         print("❌ 未找到任何有效的文档（支持：PDF、HTML、TXT、DOCX）")
@@ -104,14 +143,6 @@ def main():
 
     print(f"✅ 成功加载 {len(documents)} 个文档")
 
-    # 4. 将文档拆成块
-    documents_chunks = []
-    documents_chunks_filename = []
-    for doc_index,doc in enumerate(documents):
-        new_chunks = doc.split('\n')
-        new_chunks = ["\n".join(new_chunks[i:i+args.chunk_lines]) for i in range(len(new_chunks)//args.chunk_lines)]
-        documents_chunks += new_chunks
-        documents_chunks_filename += [file_names[doc_index]] * len(new_chunks)
 
     # 4. 构造请求
     URL = "http://127.0.0.1:5678"
@@ -155,13 +186,14 @@ def main():
             chunk_index = result.get("index", -1)
             score = result.get("score", 0.0)
 
-            if chunk_index < len(documents_chunks_filename):
-                filename = documents_chunks_filename[chunk_index]
+            if chunk_index < len(chunk2filename_idx):
+                filename = documents_paths[chunk2filename_idx[chunk_index]]
             else:
                 filename = f"[未知文档_{chunk_index}]"
 
             print(f"{idx:2d}. {filename} (score: {score})")
-            print(f"    文件内容:{documents_chunks[chunk_index]}")
+            print(f"    内容: {documents_chunks[chunk_index]}")
+            print()
 
         # 可选：输出完整结果（用于调试）
         print(f"\n🔍 完整响应:")
