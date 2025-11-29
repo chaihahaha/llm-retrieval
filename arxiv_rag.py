@@ -44,12 +44,13 @@ All categories
     "hepex": "high energy physics experiment",
     "astroph": "astrophysics",
     "astrophCO": "astrophysics cosmology and nongalactic astrophysics",
-    "astrophEP": "astrophysics high energy astrophysical phenomena",
+    "astrophEP": "astrophysics Earth and Planetary Astrophysics",
     "astrophHE": "astrophysics high energy astrophysical phenomena",
     "astrophIM": "astrophysics instrumentation and methods",
     "astrophSR": "astrophysics solar and stellar astrophysics",
     "astrophGA": "astrophysics galactic astrophysics"
     "compgas": "computing and gas dynamics",
+    "aosci": "Atmospheric and Oceanic Physics",
   },
   "math": {
     "mathLO": "mathematics logic",
@@ -132,7 +133,6 @@ All categories
     "csSC": "computer science Symbolic Computation",
     "csDS": "computer science data structures and algorithms",
     "cmplg": "computing and logic",
-    "aosci": "applied physics and scientific computing"
   },
   "chemistry": {
     "chemph": "chemical physics"
